@@ -53,9 +53,11 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
 
 ### Processing Pipeline
 - **Near Real-time**: 1-5 minute processing delay acceptable
-- Redis streams for event queuing
+- Redis streams for reliable event queuing with automatic retry capabilities
 - Background workers (Django-RQ or Celery) for batch processing
 - Periodic aggregation jobs
+- **Event Serialization**: JSON serialization of complex objects for Redis storage
+- **Error Handling**: Fail-open approach for Redis failures during rate limiting
 
 ## Development Environment Strategy
 
@@ -91,6 +93,9 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
 - uv for Python dependency management
 - Makefile for common commands (start DBs, run tests, etc.)
 - Local development focus initially
+- **Code Quality**: Ruff, Black, isort, MyPy, Bandit with pre-commit hooks
+- **Django Management Commands**: Custom commands for operational tasks and testing
+- **Professional Error Handling**: Proper exception chaining and logging throughout
 
 ## Data Management
 - **Raw Event Retention**: Configurable per project (default: 90 days)
@@ -141,6 +146,47 @@ graph TD
 - **Development**: Sample 1% of production traffic for testing
 - **A/B Testing**: Deterministic sampling for consistent user experiences
 - **High-Volume Sources**: Different sampling rates per event source
+
+## Event Ingestion API Design
+
+### Authentication & Rate Limiting
+- **API Key Format**: `sa_<random_token>` with Bearer token authentication
+- **Rate Limiting**: Redis-based sliding window (per project and per IP)
+- **Fail-Open Design**: Continue processing if Redis rate limiting fails
+- **Header Support**: Standardized `X-Forwarded-For` and `X-Real-IP` handling
+
+### Request/Response Format
+```json
+// Request
+POST /api/events/ingest/
+Authorization: Bearer sa_<token>
+Content-Type: application/json
+
+{
+  "event_name": "page_view",
+  "event_source": "web_app",
+  "user_id": "user_123",  // optional
+  "session_id": "sess_abc",  // optional
+  "event_id": "client_event_id",  // optional
+  "properties": {
+    "page": "/dashboard",
+    "referrer": "https://google.com"
+  },
+  "timestamp": "2023-01-01T12:00:00Z"  // optional, defaults to server time
+}
+
+// Response (202 Accepted)
+{
+  "status": "accepted",
+  "sampled": false
+}
+```
+
+### Validation & Limits
+- **Properties Size**: 64KB maximum when JSON-serialized
+- **Event Name**: 255 characters maximum
+- **Auto-Creation**: Event sources created automatically if not exists
+- **Smart Defaults**: Timestamp, user_id, session_id auto-generated if missing
 
 ## Monitoring & Observability
 - **Health Checks**: Redis connection, PostgreSQL queries, worker status
