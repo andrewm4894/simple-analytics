@@ -15,8 +15,9 @@ Building a lightweight analytics stack using Django (backend) and React (fronten
 ### Data Flow Architecture
 ```
 Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreSQL
-                                      ↓
-                              Dashboard API ← PostgreSQL
+       ↑ (Public Keys)                                               ↓
+                                                            Dashboard API
+                                                         ↑ (Private Keys)
 ```
 
 ### Event Data Schema
@@ -36,8 +37,10 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
 ```
 
 ### Multi-Project Support
-- Each project has unique API keys for authentication
-- Project-based data isolation
+- **Dual API Key System**: Each project has separate keys for security isolation:
+  - **Public API Keys** (`sa_*`): For event ingestion, safe for frontend use
+  - **Private API Keys** (`sa_priv_*`): For dashboard data access, backend only
+- Project-based data isolation and authentication
 - Per-project configurable settings:
   - Rate limiting and quotas
   - Data retention policies (raw events, aggregated data)
@@ -46,10 +49,13 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
   - **Flexible sampling configuration** (project and source level)
 
 ### Security & Rate Limiting
-- API key validation per project
+- **Dual API key validation** per project with separate access scopes
+- **PublicApiKeyAuthentication**: Event ingestion with public keys
+- **PrivateApiKeyAuthentication**: Dashboard API access with private keys
 - Rate limiting by project ID and IP address
 - Input validation and sanitization
 - SQL injection protection via ORM
+- Project-based data isolation with custom permission classes
 
 ### Processing Pipeline
 - **Near Real-time**: 1-5 minute processing delay acceptable
@@ -152,7 +158,9 @@ graph TD
 ## Event Ingestion API Design
 
 ### Authentication & Rate Limiting
-- **API Key Format**: `sa_<random_token>` with Bearer token authentication
+- **Public API Key Format**: `sa_<random_token>` for event ingestion
+- **Private API Key Format**: `sa_priv_<random_token>` for dashboard access
+- **Bearer token authentication** for both key types
 - **Rate Limiting**: Redis-based sliding window (per project and per IP)
 - **Fail-Open Design**: Continue processing if Redis rate limiting fails
 - **Header Support**: Standardized `X-Forwarded-For` and `X-Real-IP` handling
@@ -217,7 +225,8 @@ graph TD
 
 ### Aggregation Models
 - **DailyEventAggregation**: Event counts by project/source/name per day
-- **HourlyEventAggregation**: Event counts by project/source/name per hour  
+- **HourlyEventAggregation**: Event counts by project/source/name per hour
+- **FiveMinuteEventAggregation**: Near real-time event counts for dashboard widgets
 - **ProjectDailySummary**: Daily project statistics with top events and source breakdown
 
 ### Management Commands
@@ -267,8 +276,60 @@ graph TD
 
 **Recommendation**: Start with PostgreSQL + proper indexing. Consider DuckDB later if analytical query performance becomes a bottleneck.
 
-## Future Dashboard Features
-- User authentication and authorization
-- Project-based data filtering
-- Basic aggregations and visualizations
+## Dashboard API Design
+
+### Authentication & Authorization
+- **Private API Key Authentication**: `sa_priv_<token>` required for all dashboard endpoints
+- **Project-based Data Isolation**: Users only see data for their authenticated project
+- **Custom Permission Classes**: `IsProjectAuthenticated` for Project-based auth
+
+### Dashboard API Endpoints
+
+#### Event Querying
+```
+GET /api/events/query/
+Authorization: Bearer sa_priv_<token>
+
+Query Parameters:
+- start_date: ISO datetime (default: 24h ago)
+- end_date: ISO datetime (default: now)  
+- event_name: Filter by event name
+- event_source_id: Filter by event source
+- user_id: Filter by user
+- page: Page number
+- page_size: Results per page (max 1000)
+```
+
+#### Aggregation Endpoints
+```
+GET /api/events/aggregations/daily/     # Daily aggregations
+GET /api/events/aggregations/hourly/    # Hourly aggregations  
+GET /api/events/aggregations/5min/      # 5-minute aggregations
+GET /api/events/summaries/daily/        # Daily project summaries
+```
+
+#### Real-time Metrics
+```
+GET /api/events/metrics/realtime/       # Current stats for widgets
+GET /api/events/names/                  # Unique event names
+GET /api/events/sources/                # Event sources list
+```
+
+### Response Format & Performance
+- **Pagination**: Standardized pagination with configurable page sizes
+- **Time-based Filtering**: Efficient queries with proper date range defaults
+- **Optimized Queries**: `select_related()` for performance
+- **Project Isolation**: All queries automatically filtered by authenticated project
+
+### Serializers & Data Structures
+- **EventSerializer**: Raw event data with project/source relationships
+- **AggregationSerializers**: Daily/hourly/5-minute aggregation data
+- **RealTimeMetricsSerializer**: Dashboard widget data
+- **TimeRangeFilterSerializer**: Flexible date range validation
+
+## Future Dashboard Features (React Frontend)
+- React application consuming Dashboard API
+- Real-time dashboard widgets using 5-minute aggregations
+- Interactive visualizations and charts
+- Project management interface
 - Data export capabilities

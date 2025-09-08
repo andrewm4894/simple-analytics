@@ -57,7 +57,8 @@ erDiagram
     Project {
         uuid id PK
         string name
-        string api_key
+        string public_api_key
+        string private_api_key
         json settings
         json cors_allowlist
         int rate_limit_per_minute
@@ -104,7 +105,8 @@ graph TD
     
     F[Scheduler/Cron] --> G[Aggregation Jobs]
     G --> H[DailyEventAggregation]
-    G --> I[HourlyEventAggregation] 
+    G --> I[HourlyEventAggregation]
+    G --> I2[FiveMinuteEventAggregation]
     G --> J[ProjectDailySummary]
     
     E --> G
@@ -122,7 +124,42 @@ graph TD
 - **Aggregation Models**: Pre-computed analytics for dashboard performance
 - **Management Commands**: Operational tools for monitoring and control
 
-### 5. Development Environment Architecture
+### 5. Dashboard API Architecture
+
+```mermaid
+graph TD
+    Client[Dashboard Client] --> Auth[Private API Key Auth]
+    Auth --> Perm[IsProjectAuthenticated Permission]
+    Perm --> API[Dashboard API Views]
+    
+    API --> EventQuery[Event Query View]
+    API --> DailyAgg[Daily Aggregation View] 
+    API --> HourlyAgg[Hourly Aggregation View]
+    API --> FiveMinAgg[5-Min Aggregation View]
+    API --> Summary[Project Summary View]
+    API --> Metrics[Real-time Metrics]
+    API --> Meta[Event Names/Sources]
+    
+    EventQuery --> PostgreSQL[(PostgreSQL)]
+    DailyAgg --> PostgreSQL
+    HourlyAgg --> PostgreSQL
+    FiveMinAgg --> PostgreSQL
+    Summary --> PostgreSQL
+    Metrics --> PostgreSQL
+    Meta --> PostgreSQL
+    
+    PostgreSQL --> Response[JSON Response]
+    Response --> Pagination[Paginated Results]
+```
+
+**Key Components:**
+- **PrivateApiKeyAuthentication**: Validates `sa_priv_*` tokens for dashboard access
+- **IsProjectAuthenticated**: Custom permission ensuring Project-based data access
+- **Specialized Views**: Dedicated endpoints for different data aggregation levels
+- **Optimized Queries**: `select_related()` and proper filtering for performance
+- **Pagination**: Configurable pagination with maximum page size limits
+
+### 6. Development Environment Architecture
 
 ```mermaid
 graph LR
@@ -185,11 +222,12 @@ python-dotenv==1.1.1
 5. **Worker** generates missing user_id/session_id if needed
 6. **Event** is stored in PostgreSQL with full metadata
 
-### 2. Query Flow
-1. **Dashboard** requests data via REST API
-2. **API** validates user authentication and project access
-3. **PostgreSQL** queries with appropriate filters and aggregations
-4. **Results** returned as JSON with pagination
+### 2. Dashboard API Flow
+1. **Dashboard** requests data via REST API with private API key
+2. **PrivateApiKeyAuthentication** validates private API key and project access
+3. **IsProjectAuthenticated** permission ensures project-based data isolation
+4. **PostgreSQL** queries with appropriate filters, aggregations, and pagination
+5. **Results** returned as JSON with project-filtered data
 
 ### 3. Background Processing
 1. **Redis Streams** hold incoming events in consumer groups
@@ -203,20 +241,27 @@ python-dotenv==1.1.1
 4. **Aggregation Jobs** create:
    - Daily event summaries by project/source/name
    - Hourly event statistics
+   - 5-minute aggregations for real-time analytics
    - Project daily summaries with source breakdown
 
 ## Security Architecture
 
 ### Authentication & Authorization
-- **API Keys**: Project-based authentication for event ingestion
-- **Session Auth**: Django sessions for dashboard access
+- **Dual API Key System**: Separate security scopes for different operations
+  - **Public API Keys** (`sa_*`): Event ingestion authentication (safe for frontend)
+  - **Private API Keys** (`sa_priv_*`): Dashboard data access authentication (backend only)
+- **Authentication Classes**:
+  - **PublicApiKeyAuthentication**: Validates public keys for event ingestion
+  - **PrivateApiKeyAuthentication**: Validates private keys for dashboard access
+- **Custom Permissions**: `IsProjectAuthenticated` for project-based data access
 - **CORS**: Configurable per-project allowlist
 - **Rate Limiting**: Per-project and per-IP limits
 
 ### Data Isolation
-- **Multi-tenant**: All queries filtered by project_id
+- **Multi-tenant**: All queries automatically filtered by authenticated project
 - **Project Settings**: Isolated configuration per project
-- **API Key Scoping**: Keys tied to specific projects
+- **Dual API Key Scoping**: Both public and private keys tied to specific projects
+- **Authentication-based Filtering**: Dashboard API enforces project isolation through authentication
 
 ## Configuration Management
 
@@ -295,18 +340,26 @@ Each project can configure:
 **Background Processing (Phase 4):**
 - Django-RQ worker system with EventProcessor class
 - Redis stream consumption with consumer groups
-- Event aggregation models (daily/hourly summaries)
+- Event aggregation models (daily/hourly/5-minute summaries)
 - Management commands for operational tasks
 - Error handling and monitoring capabilities
 
-### 🚧 Current Focus (Phase 5)
-- Dashboard API endpoints for analytics
-- Event querying with filtering and pagination
-- Real-time metrics endpoints
-- Project-based data isolation for queries
+**Dashboard API (Phase 5):**
+- Complete Dashboard API with dual authentication system
+- Event querying endpoints with filtering and pagination
+- Aggregation endpoints (daily/hourly/5-minute analytics)
+- Real-time metrics endpoints for dashboard widgets
+- Project-based data isolation with custom authentication classes
+- Performance-optimized queries with proper indexing
 
-### 📋 Planned (Phase 6+)
-- Comprehensive testing suite
-- Load testing and performance optimization
-- React frontend dashboard
+### 🚧 Current Focus (Phase 6)
+- Comprehensive testing suite with unit and integration tests
+- Load testing validation for high event volumes
+- API documentation and developer tooling
+- Performance monitoring and observability setup
+
+### 📋 Planned (Phase 7+)
+- React frontend dashboard consuming Dashboard API
+- Interactive visualizations and charts
 - Advanced monitoring and alerting
+- Production deployment and scaling
