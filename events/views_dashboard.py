@@ -7,8 +7,12 @@ from datetime import timedelta
 from django.db.models import Count
 from django.utils import timezone
 
-from rest_framework import exceptions, generics, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -102,6 +106,11 @@ class EventQueryView(generics.ListAPIView):
                 queryset = queryset.filter(event_source_id=filters["event_source_id"])
             if filters.get("user_id"):
                 queryset = queryset.filter(user_id=filters["user_id"])
+        else:
+            # Raise validation error if filter parameters are invalid
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError(filter_serializer.errors)
 
         return queryset
 
@@ -250,6 +259,7 @@ class ProjectSummaryView(generics.ListAPIView):
 
 
 @api_view(["GET"])
+@authentication_classes([PrivateApiKeyAuthentication])
 @permission_classes([IsProjectAuthenticated])
 def real_time_metrics(request):
     """
@@ -266,17 +276,7 @@ def real_time_metrics(request):
     - Top events today
     - Event sources list
     """
-    # Use API key authentication
-    auth = PrivateApiKeyAuthentication()
-    try:
-        project, _ = auth.authenticate(request)
-        if not project:
-            return Response(
-                {"error": "Authentication required"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-    except exceptions.AuthenticationFailed as e:
-        return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+    project = request.user
     now = timezone.now()
 
     # Current time windows
@@ -319,9 +319,7 @@ def real_time_metrics(request):
 
     # Event sources
     event_sources = list(
-        project.eventsource_set.filter(is_active=True).values(
-            "id", "name", "description"
-        )
+        project.event_sources.filter(is_active=True).values("id", "name", "description")
     )
 
     metrics_data = {
@@ -343,6 +341,7 @@ def real_time_metrics(request):
 
 
 @api_view(["GET"])
+@authentication_classes([PrivateApiKeyAuthentication])
 @permission_classes([IsProjectAuthenticated])
 def event_names_list(request):
     """
@@ -350,17 +349,7 @@ def event_names_list(request):
 
     GET /api/events/names/
     """
-    # Use API key authentication
-    auth = PrivateApiKeyAuthentication()
-    try:
-        project, _ = auth.authenticate(request)
-        if not project:
-            return Response(
-                {"error": "Authentication required"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-    except exceptions.AuthenticationFailed as e:
-        return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+    project = request.user
 
     # Get unique event names from recent events (last 30 days)
     recent_cutoff = timezone.now() - timedelta(days=30)
@@ -376,6 +365,7 @@ def event_names_list(request):
 
 
 @api_view(["GET"])
+@authentication_classes([PrivateApiKeyAuthentication])
 @permission_classes([IsProjectAuthenticated])
 def event_sources_list(request):
     """
@@ -383,20 +373,10 @@ def event_sources_list(request):
 
     GET /api/events/sources/
     """
-    # Use API key authentication
-    auth = PrivateApiKeyAuthentication()
-    try:
-        project, _ = auth.authenticate(request)
-        if not project:
-            return Response(
-                {"error": "Authentication required"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-    except exceptions.AuthenticationFailed as e:
-        return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+    project = request.user
 
     sources = list(
-        project.eventsource_set.filter(is_active=True)
+        project.event_sources.filter(is_active=True)
         .values("id", "name", "description", "created_at")
         .order_by("name")
     )

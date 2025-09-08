@@ -19,11 +19,17 @@ dependencies = [
 dev = [
     "bandit>=1.8.6",
     "black>=25.1.0",
+    "coverage>=7.6.0",
     "django-stubs>=5.2.2",
+    "factory-boy>=3.3.0",
+    "faker>=30.0.0",
     "isort>=6.0.1",
     "mypy>=1.17.1",
     "mypy-extensions>=1.1.0",
     "pre-commit>=4.3.0",
+    "pytest>=8.3.0",
+    "pytest-django>=4.9.0",
+    "pytest-mock>=3.14.0",
     "ruff>=0.12.12",
     "safety>=3.6.1",
 ]
@@ -114,3 +120,45 @@ skips = ["B101", "B311"]  # Skip assert_used and random generator tests (samplin
 
 [tool.bandit.assert_used]
 skips = ["*test*.py", "*/test_*.py"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "analytics_backend.settings"
+python_files = ["tests.py", "test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--disable-warnings",
+    "--reuse-db",
+    "--tb=short"
+]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["projects", "events"]
+omit = [
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/tests/*",
+    "manage.py",
+    "analytics_backend/wsgi.py",
+    "analytics_backend/asgi.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+]
