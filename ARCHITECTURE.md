@@ -93,7 +93,36 @@ erDiagram
     Project ||--o{ EventSource : manages
 ```
 
-### 3. Development Environment Architecture
+### 4. Background Processing Architecture
+
+```mermaid
+graph TD
+    A[Event Ingestion API] --> B[Redis Stream: events]
+    B --> C[Consumer Group: processors]
+    C --> D[RQ Worker: EventProcessor]
+    D --> E[PostgreSQL Events Table]
+    
+    F[Scheduler/Cron] --> G[Aggregation Jobs]
+    G --> H[DailyEventAggregation]
+    G --> I[HourlyEventAggregation] 
+    G --> J[ProjectDailySummary]
+    
+    E --> G
+    
+    K[Management Commands] --> L[process_events]
+    K --> M[aggregate_events]
+    K --> N[cleanup_events]
+    K --> O[event_status]
+```
+
+**Key Components:**
+- **Redis Streams**: Reliable message queuing with consumer groups
+- **EventProcessor**: Core processing class handling event deserialization
+- **RQ Jobs**: Scalable background task execution
+- **Aggregation Models**: Pre-computed analytics for dashboard performance
+- **Management Commands**: Operational tools for monitoring and control
+
+### 5. Development Environment Architecture
 
 ```mermaid
 graph LR
@@ -163,13 +192,18 @@ python-dotenv==1.1.1
 4. **Results** returned as JSON with pagination
 
 ### 3. Background Processing
-1. **Redis Streams** hold incoming events
-2. **RQ Workers** consume events from streams
-3. **Workers** handle:
+1. **Redis Streams** hold incoming events in consumer groups
+2. **Django-RQ Workers** consume events with reliable acknowledgment
+3. **EventProcessor** handles:
+   - Event deserialization from Redis
    - User ID generation (cookie-based or IP+UserAgent hash)
    - Session ID creation (user + 60min window)
    - Data validation and enrichment
-   - Database storage
+   - Database storage with error handling
+4. **Aggregation Jobs** create:
+   - Daily event summaries by project/source/name
+   - Hourly event statistics
+   - Project daily summaries with source breakdown
 
 ## Security Architecture
 
@@ -212,11 +246,16 @@ Each project can configure:
 
 ## Monitoring & Observability
 
-### Planned Components
-- **Health Checks**: Database connectivity, Redis status, worker health
+### Current Implementation
+- **Management Commands**: System monitoring via `event_status` command
+- **Health Checks**: Database connectivity, Redis status, processing statistics
+- **Worker Status**: RQ job monitoring and queue management
+- **Error Handling**: Comprehensive exception logging throughout pipeline
+
+### Planned Components  
 - **Metrics**: Prometheus integration for ingestion rates and processing lag
-- **Logging**: Structured logging with configurable levels
-- **Admin Dashboard**: Built-in system monitoring
+- **Admin Dashboard**: Built-in system monitoring interface
+- **Alerting**: When processing falls behind or errors spike
 
 ## Scalability Considerations
 
@@ -233,21 +272,41 @@ Each project can configure:
 
 ## Implementation Status
 
-### ✅ Completed (Phase 1)
-- uv project structure with dependencies
-- Docker Compose setup for databases
+### ✅ Completed (Phases 1-4)
+**Foundation (Phase 1):**
+- uv project structure with professional development environment
+- Docker Compose setup for PostgreSQL and Redis
 - Django project with apps (projects, events)
-- Basic configuration and settings
-- Makefile for common tasks
+- Makefile for common tasks and code quality tools
 
-### 🚧 In Progress
-- Core data models (Project, Event)
-- API authentication middleware
-- Event ingestion endpoints
+**Data Models (Phase 2):**
+- Multi-project architecture with Project and EventSource models
+- Flexible Event model with JSONB properties
+- Sampling configuration at project and source levels
+- User identification and session management
 
-### 📋 Planned
-- Background processing with RQ
-- Dashboard API endpoints
-- Admin interface
-- Monitoring and health checks
+**Event Ingestion API (Phase 3):**
+- High-performance `/api/events/ingest` endpoint
+- API key authentication with Bearer token support
+- Redis-based rate limiting (per project and IP)
+- Comprehensive input validation and CORS handling
+- Redis stream queuing for reliable event processing
+
+**Background Processing (Phase 4):**
+- Django-RQ worker system with EventProcessor class
+- Redis stream consumption with consumer groups
+- Event aggregation models (daily/hourly summaries)
+- Management commands for operational tasks
+- Error handling and monitoring capabilities
+
+### 🚧 Current Focus (Phase 5)
+- Dashboard API endpoints for analytics
+- Event querying with filtering and pagination
+- Real-time metrics endpoints
+- Project-based data isolation for queries
+
+### 📋 Planned (Phase 6+)
+- Comprehensive testing suite
 - Load testing and performance optimization
+- React frontend dashboard
+- Advanced monitoring and alerting
