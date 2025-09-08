@@ -12,7 +12,8 @@ class Project(models.Model):
     description = models.TextField(blank=True)
 
     # API Authentication
-    api_key = models.CharField(max_length=64, unique=True, editable=False)
+    public_api_key = models.CharField(max_length=64, unique=True, editable=False)
+    private_api_key = models.CharField(max_length=64, unique=True, editable=False)
 
     # Project Settings
     rate_limit_per_minute = models.PositiveIntegerField(
@@ -70,7 +71,8 @@ class Project(models.Model):
     class Meta:
         db_table = "projects"
         indexes = [
-            models.Index(fields=["api_key"]),
+            models.Index(fields=["public_api_key"]),
+            models.Index(fields=["private_api_key"]),
             models.Index(fields=["owner", "created_at"]),
             models.Index(fields=["is_active"]),
         ]
@@ -79,21 +81,44 @@ class Project(models.Model):
         return f"{self.name} ({self.id})"
 
     def save(self, *args, **kwargs):
-        # Generate API key if not set
-        if not self.api_key:
-            self.api_key = self.generate_api_key()
+        # Generate API keys if not set
+        if not self.public_api_key:
+            self.public_api_key = self.generate_public_api_key()
+        if not self.private_api_key:
+            self.private_api_key = self.generate_private_api_key()
         super().save(*args, **kwargs)
 
     @staticmethod
-    def generate_api_key():
-        """Generate a secure API key"""
+    def generate_public_api_key():
+        """Generate a secure public API key for event ingestion"""
         return f"sa_{secrets.token_urlsafe(40)}"
 
-    def regenerate_api_key(self):
-        """Regenerate the API key for this project"""
-        self.api_key = self.generate_api_key()
-        self.save(update_fields=["api_key", "updated_at"])
-        return self.api_key
+    @staticmethod
+    def generate_private_api_key():
+        """Generate a secure private API key for dashboard access"""
+        return f"sa_priv_{secrets.token_urlsafe(40)}"
+
+    def regenerate_public_api_key(self):
+        """Regenerate the public API key for this project"""
+        self.public_api_key = self.generate_public_api_key()
+        self.save(update_fields=["public_api_key", "updated_at"])
+        return self.public_api_key
+
+    def regenerate_private_api_key(self):
+        """Regenerate the private API key for this project"""
+        self.private_api_key = self.generate_private_api_key()
+        self.save(update_fields=["private_api_key", "updated_at"])
+        return self.private_api_key
+
+    def regenerate_all_api_keys(self):
+        """Regenerate both API keys for this project"""
+        self.public_api_key = self.generate_public_api_key()
+        self.private_api_key = self.generate_private_api_key()
+        self.save(update_fields=["public_api_key", "private_api_key", "updated_at"])
+        return {
+            "public_api_key": self.public_api_key,
+            "private_api_key": self.private_api_key,
+        }
 
     def get_event_count(self):
         """Get total event count for this project"""

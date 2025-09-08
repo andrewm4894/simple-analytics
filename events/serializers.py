@@ -9,6 +9,14 @@ from rest_framework import serializers
 
 from projects.models import EventSource, Project
 
+from .models import Event
+from .models_aggregation import (
+    DailyEventAggregation,
+    FiveMinuteEventAggregation,
+    HourlyEventAggregation,
+    ProjectDailySummary,
+)
+
 
 class EventIngestionSerializer(serializers.Serializer):
     """
@@ -181,3 +189,170 @@ class EventIngestionSerializer(serializers.Serializer):
             event_data["event_id"] = validated_data["event_id"]
 
         return event_data
+
+
+# Dashboard API Serializers
+
+
+class EventSerializer(serializers.ModelSerializer):
+    """Serializer for Event model with filtering support"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    event_source_name = serializers.CharField(
+        source="event_source.name", read_only=True
+    )
+
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "event_id",
+            "project_name",
+            "event_source_name",
+            "event_name",
+            "event_properties",
+            "user_id",
+            "session_id",
+            "ip_address",
+            "user_agent",
+            "timestamp",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class DailyAggregationSerializer(serializers.ModelSerializer):
+    """Serializer for daily event aggregations"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    event_source_name = serializers.CharField(
+        source="event_source.name", read_only=True
+    )
+
+    class Meta:
+        model = DailyEventAggregation
+        fields = [
+            "project_name",
+            "event_source_name",
+            "event_name",
+            "date",
+            "event_count",
+            "unique_users",
+            "unique_sessions",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class HourlyAggregationSerializer(serializers.ModelSerializer):
+    """Serializer for hourly event aggregations"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    event_source_name = serializers.CharField(
+        source="event_source.name", read_only=True
+    )
+
+    class Meta:
+        model = HourlyEventAggregation
+        fields = [
+            "project_name",
+            "event_source_name",
+            "event_name",
+            "datetime_hour",
+            "event_count",
+            "unique_users",
+            "unique_sessions",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class FiveMinuteAggregationSerializer(serializers.ModelSerializer):
+    """Serializer for 5-minute event aggregations"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    event_source_name = serializers.CharField(
+        source="event_source.name", read_only=True
+    )
+
+    class Meta:
+        model = FiveMinuteEventAggregation
+        fields = [
+            "project_name",
+            "event_source_name",
+            "event_name",
+            "datetime_5min",
+            "event_count",
+            "unique_users",
+            "unique_sessions",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ProjectDailySummarySerializer(serializers.ModelSerializer):
+    """Serializer for project daily summaries"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+
+    class Meta:
+        model = ProjectDailySummary
+        fields = [
+            "project_name",
+            "date",
+            "total_events",
+            "unique_users",
+            "unique_sessions",
+            "unique_event_names",
+            "source_breakdown",
+            "top_events",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class RealTimeMetricsSerializer(serializers.Serializer):
+    """Serializer for real-time metrics response"""
+
+    project_name = serializers.CharField()
+    current_hour_events = serializers.IntegerField()
+    current_day_events = serializers.IntegerField()
+    last_24h_events = serializers.IntegerField()
+    active_users_today = serializers.IntegerField()
+    active_sessions_now = serializers.IntegerField()
+    top_events_today = serializers.ListField()
+    event_sources = serializers.ListField()
+    last_updated = serializers.DateTimeField()
+
+
+class TimeRangeFilterSerializer(serializers.Serializer):
+    """Serializer for time range filtering"""
+
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
+    project_id = serializers.UUIDField(required=False)
+    event_name = serializers.CharField(required=False, max_length=255)
+    event_source_id = serializers.UUIDField(required=False)
+    user_id = serializers.CharField(required=False, max_length=255)
+
+    def validate(self, data):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        if start_date and end_date and start_date >= end_date:
+            raise serializers.ValidationError("start_date must be before end_date")
+
+        # Default to last 24 hours if no dates provided
+        if not start_date and not end_date:
+            data["end_date"] = timezone.now()
+            data["start_date"] = data["end_date"] - timedelta(hours=24)
+        elif not start_date:
+            data["start_date"] = end_date - timedelta(hours=24)
+        elif not end_date:
+            data["end_date"] = start_date + timedelta(hours=24)
+
+        return data

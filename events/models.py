@@ -9,8 +9,8 @@ from projects.models import EventSource, Project
 # Import aggregation models to make them available
 from .models_aggregation import (  # noqa: F401
     DailyEventAggregation,
-    HourlyEventAggregation, 
-    ProjectDailySummary
+    HourlyEventAggregation,
+    ProjectDailySummary,
 )
 
 
