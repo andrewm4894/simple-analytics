@@ -18,6 +18,7 @@
 - [ ] Event ingestion REST endpoint
 - [ ] API key authentication middleware
 - [ ] Rate limiting per project and IP
+- [ ] **Flexible sampling implementation** (project/source/event level)
 - [ ] Input validation and sanitization
 - [ ] Redis stream integration for event queuing
 
@@ -37,8 +38,9 @@
 
 ## Phase 6: Testing & Tooling
 - [ ] Unit tests for models and APIs
+- [ ] **Sampling strategy testing** (random, deterministic, time-window)
 - [ ] Integration tests for ingestion pipeline
-- [ ] Load testing scripts and scenarios
+- [ ] Load testing scripts and scenarios (with sampling scenarios)
 - [ ] Demo event generation scripts
 - [ ] Performance monitoring setup
 

@@ -43,6 +43,7 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
   - Data retention policies (raw events, aggregated data)
   - Event source management (multiple sources per project)
   - CORS allowlist (or wildcard * option)
+  - **Flexible sampling configuration** (project and source level)
 
 ### Security & Rate Limiting
 - API key validation per project
@@ -103,6 +104,43 @@ Event Ingestion API → Redis Stream/Cache → Background Processor → PostgreS
   - Browser: Cookie-based persistent identifier
   - API/Backend: Hash of (IP address + User-Agent + project salt)
 - **Session ID**: `user_id + 60-minute time window` for grouping related events
+
+## Flexible Sampling Strategy
+
+### Sampling Levels
+- **Project Level**: Default sampling settings applied to all events
+- **Event Source Level**: Override project settings for specific sources
+- **Event Level**: Runtime sampling decisions based on configured rules
+
+### Sampling Strategies
+```mermaid
+graph TD
+    Event[Incoming Event] --> Check{Sampling Enabled?}
+    Check -->|No| Accept[Accept Event]
+    Check -->|Yes| Strategy{Sampling Strategy}
+    
+    Strategy -->|Random| Random[random() < rate]
+    Strategy -->|Deterministic| Hash[Hash user_id + project_id]
+    Strategy -->|Time Window| Time[Time-based sampling]
+    
+    Random --> Decision{Accept?}
+    Hash --> Decision
+    Time --> Decision
+    
+    Decision -->|Yes| Accept
+    Decision -->|No| Reject[Reject Event]
+```
+
+### Configuration Options
+- **Random Sampling**: Pure random selection (10% = random 10% of events)
+- **Deterministic Sampling**: Consistent sampling based on user_id hash (same users always sampled)
+- **Time Window Sampling**: Sample within time periods (useful for consistent time-based analysis)
+
+### Use Cases
+- **Cost Control**: Sample 10% of events to reduce storage costs
+- **Development**: Sample 1% of production traffic for testing
+- **A/B Testing**: Deterministic sampling for consistent user experiences
+- **High-Volume Sources**: Different sampling rates per event source
 
 ## Monitoring & Observability
 - **Health Checks**: Redis connection, PostgreSQL queries, worker status
