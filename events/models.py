@@ -6,6 +6,13 @@ from django.utils import timezone
 
 from projects.models import EventSource, Project
 
+# Import aggregation models to make them available
+from .models_aggregation import (  # noqa: F401
+    DailyEventAggregation,
+    HourlyEventAggregation, 
+    ProjectDailySummary
+)
+
 
 class Event(models.Model):
     # Primary identifiers
